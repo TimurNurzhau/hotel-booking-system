@@ -2,6 +2,7 @@ package com.example.hotelservice.service;
 
 import com.example.hotelservice.dto.HotelDto;
 import com.example.hotelservice.entity.Hotel;
+import com.example.hotelservice.exception.NotFoundException;
 import com.example.hotelservice.repository.HotelRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,13 +32,13 @@ public class HotelService {
 
     public HotelDto getHotelById(Long id) {
         Hotel hotel = hotelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Hotel not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Hotel not found with id: " + id));
         return new HotelDto(hotel.getId(), hotel.getName(), hotel.getAddress());
     }
 
     public HotelDto updateHotel(Long id, HotelDto hotelDto) {
         Hotel hotel = hotelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Hotel not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Hotel not found with id: " + id));
         hotel.setName(hotelDto.getName());
         hotel.setAddress(hotelDto.getAddress());
         Hotel updated = hotelRepository.save(hotel);
@@ -46,7 +47,7 @@ public class HotelService {
 
     public void deleteHotel(Long id) {
         if (!hotelRepository.existsById(id)) {
-            throw new RuntimeException("Hotel not found with id: " + id);
+            throw new NotFoundException("Hotel not found with id: " + id);
         }
         hotelRepository.deleteById(id);
     }

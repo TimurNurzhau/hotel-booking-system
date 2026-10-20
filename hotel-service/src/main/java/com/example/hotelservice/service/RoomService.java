@@ -5,6 +5,7 @@ import com.example.hotelservice.dto.RoomDto;
 import com.example.hotelservice.entity.Hotel;
 import com.example.hotelservice.entity.Room;
 import com.example.hotelservice.entity.RoomBooking;
+import com.example.hotelservice.exception.NotFoundException;
 import com.example.hotelservice.repository.HotelRepository;
 import com.example.hotelservice.repository.RoomBookingRepository;
 import com.example.hotelservice.repository.RoomRepository;
@@ -28,7 +29,7 @@ public class RoomService {
 
     public RoomDto createRoom(Long hotelId, RoomDto roomDto) {
         Hotel hotel = hotelRepository.findById(hotelId)
-                .orElseThrow(() -> new RuntimeException("Hotel not found with id: " + hotelId));
+                .orElseThrow(() -> new NotFoundException("Hotel not found with id: " + hotelId));
 
         Room room = new Room();
         room.setHotel(hotel);
@@ -48,7 +49,7 @@ public class RoomService {
 
     public RoomDto getRoomById(Long id) {
         Room room = roomRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Room not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Room not found with id: " + id));
         return toDto(room);
     }
 
@@ -66,7 +67,7 @@ public class RoomService {
 
     public RoomDto updateRoom(Long id, RoomDto roomDto) {
         Room room = roomRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Room not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Room not found with id: " + id));
         room.setNumber(roomDto.getNumber());
         if (roomDto.getAvailable() != null) {
             room.setAvailable(roomDto.getAvailable());
@@ -77,7 +78,7 @@ public class RoomService {
 
     public void deleteRoom(Long id) {
         if (!roomRepository.existsById(id)) {
-            throw new RuntimeException("Room not found with id: " + id);
+            throw new NotFoundException("Room not found with id: " + id);
         }
         roomRepository.deleteById(id);
     }
@@ -85,13 +86,12 @@ public class RoomService {
     @Transactional
     public boolean confirmAvailability(Long roomId, AvailabilityRequest request) {
         Room room = roomRepository.findByIdWithLock(roomId)
-                .orElseThrow(() -> new RuntimeException("Room not found with id: " + roomId));
+                .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
 
         if (!room.getAvailable()) {
             return false;
         }
 
-        // Проверка идемпотентности: если уже есть бронь с таким requestId — возвращаем true
         if (request.getRequestId() != null) {
             if (roomBookingRepository.findByRequestId(request.getRequestId()).isPresent()) {
                 log.info("Idempotent confirmAvailability: requestId={} already processed", request.getRequestId());
@@ -99,7 +99,6 @@ public class RoomService {
             }
         }
 
-        // Проверка пересечения дат
         boolean overlapping = roomBookingRepository.existsOverlapping(
                 roomId, request.getStartDate(), request.getEndDate());
         if (overlapping) {
@@ -107,7 +106,6 @@ public class RoomService {
             return false;
         }
 
-        // Создаем запись о бронировании
         RoomBooking roomBooking = new RoomBooking();
         roomBooking.setRoomId(roomId);
         roomBooking.setStartDate(request.getStartDate());
@@ -126,9 +124,8 @@ public class RoomService {
     @Transactional
     public void releaseRoom(Long roomId, String requestId) {
         Room room = roomRepository.findByIdWithLock(roomId)
-                .orElseThrow(() -> new RuntimeException("Room not found with id: " + roomId));
+                .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
 
-        // Удаляем запись о бронировании по requestId
         if (requestId != null) {
             roomBookingRepository.deleteByRoomIdAndRequestId(roomId, requestId);
         }

@@ -8,7 +8,9 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "room_bookings")
+@Table(name = "room_bookings", indexes = {
+    @Index(name = "idx_room_dates", columnList = "roomId, startDate, endDate")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
