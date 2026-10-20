@@ -131,6 +131,12 @@ public class BookingService {
         return toDto(booking);
     }
 
+    public List<BookingDto> getAllBookings() {
+        return bookingRepository.findAll().stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public void cancelBooking(Long id, String username) {
         Booking booking = bookingRepository.findById(id)

