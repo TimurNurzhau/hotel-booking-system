@@ -1,23 +1,80 @@
+server:
+  port: 8082
+
 spring:
+  application:
+    name: booking-service
   datasource:
-    url: jdbc:h2:mem:testdb
+    url: jdbc:h2:mem:bookingdb
     driver-class-name: org.h2.Driver
     username: sa
     password:
   jpa:
     hibernate:
       ddl-auto: create-drop
-    show-sql: false
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
   cloud:
-    discovery:
-      enabled: false
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 2000
+            logger-level: basic
 
 eureka:
   client:
-    enabled: false
-    register-with-eureka: false
-    fetch-registry: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
 
 jwt:
   secret: mySuperSecretKeyForHotelBookingSystem1234567890
-  expiration: 3600000
+  expiration: 3600000  # 1 hour
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+resilience4j:
+  retry:
+    instances:
+      hotelService:
+        max-attempts: 3
+        wait-duration: 500ms
+        retry-exceptions:
+          - feign.RetryableException
+          - java.io.IOException
+  circuitbreaker:
+    instances:
+      hotelService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-},%X{spanId:-}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"
+  level:
+    org.springframework.security: DEBUG
+    io.github.resilience4j: DEBUG
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: https://animated-space-yodel-q77v77j7qggx365gg-9411.app.github.dev/api/v2/spans
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers,retries
+  endpoint:
+    health:
+      show-details: always
