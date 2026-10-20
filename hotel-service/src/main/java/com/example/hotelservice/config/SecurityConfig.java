@@ -42,7 +42,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").permitAll()
                         // Error
                         .requestMatchers("/error").permitAll()
-                        // Внутренние эндпоинты для Feign-вызовов из booking-service (без JWT)
+                        // Внутренние эндпоинты для Feign-вызовов из booking-service
+                        // ВАЖНО: В реальном проекте эти эндпоинты должны быть закрыты mTLS или API-Key!
                         .requestMatchers("/api/rooms/recommend").permitAll()
                         .requestMatchers("/api/rooms/*/confirm-availability").permitAll()
                         .requestMatchers("/api/rooms/*/release").permitAll()

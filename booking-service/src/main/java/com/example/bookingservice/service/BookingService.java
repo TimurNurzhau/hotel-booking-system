@@ -34,6 +34,7 @@ public class BookingService {
 
     @Transactional(noRollbackFor = ServiceUnavailableException.class)
     public BookingDto createBooking(BookingRequest request, String username) {
+        // 1. Валидация дат
         if (request.getStartDate() == null || request.getEndDate() == null) {
             throw new BadRequestException("startDate and endDate are required");
         }
@@ -41,6 +42,7 @@ public class BookingService {
             throw new BadRequestException("startDate must be before or equal to endDate");
         }
 
+        // 2. Проверка идемпотентности
         if (request.getRequestId() != null) {
             Optional<Booking> existing = bookingRepository.findByRequestId(request.getRequestId());
             if (existing.isPresent()) {
@@ -49,9 +51,11 @@ public class BookingService {
             }
         }
 
+        // 3. Поиск пользователя
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new NotFoundException("User not found: " + username));
 
+        // 4. Выбор комнаты
         Long roomId = request.getRoomId();
         if (request.isAutoSelect()) {
             List<RoomDto> recommended;
@@ -63,13 +67,38 @@ public class BookingService {
             if (recommended == null || recommended.isEmpty()) {
                 throw new ServiceUnavailableException("No available rooms");
             }
-            roomId = recommended.get(0).getId();
+
+            // Ищем первую комнату, которая реально доступна
+            boolean found = false;
+            for (RoomDto room : recommended) {
+                try {
+                    AvailabilityRequest availabilityRequest = new AvailabilityRequest();
+                    availabilityRequest.setStartDate(request.getStartDate());
+                    availabilityRequest.setEndDate(request.getEndDate());
+                    availabilityRequest.setRequestId(request.getRequestId());
+
+                    Boolean confirmed = hotelServiceClient.confirmAvailability(room.getId(), availabilityRequest);
+                    if (Boolean.TRUE.equals(confirmed)) {
+                        roomId = room.getId();
+                        found = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to check availability for room {}: {}", room.getId(), e.getMessage());
+                    // Продолжаем проверять следующие комнаты
+                }
+            }
+
+            if (!found) {
+                throw new ServiceUnavailableException("No available rooms for the selected dates");
+            }
         }
 
         if (roomId == null) {
             throw new BadRequestException("roomId is required when autoSelect=false");
         }
 
+        // 5. Создание бронирования в статусе PENDING
         Booking booking = new Booking();
         booking.setUser(user);
         booking.setRoomId(roomId);
@@ -82,38 +111,50 @@ public class BookingService {
 
         log.info("Booking created in PENDING: id={}, roomId={}", booking.getId(), roomId);
 
-        try {
-            AvailabilityRequest availabilityRequest = new AvailabilityRequest();
-            availabilityRequest.setStartDate(request.getStartDate());
-            availabilityRequest.setEndDate(request.getEndDate());
-            availabilityRequest.setRequestId(request.getRequestId());
+        // 6. Вызов Hotel Service для подтверждения (если не autoSelect, т.к. там уже подтвердили)
+        if (!request.isAutoSelect()) {
+            try {
+                AvailabilityRequest availabilityRequest = new AvailabilityRequest();
+                availabilityRequest.setStartDate(request.getStartDate());
+                availabilityRequest.setEndDate(request.getEndDate());
+                availabilityRequest.setRequestId(request.getRequestId());
 
-            Boolean confirmed = hotelServiceClient.confirmAvailability(roomId, availabilityRequest);
+                Boolean confirmed = hotelServiceClient.confirmAvailability(roomId, availabilityRequest);
 
-            if (Boolean.TRUE.equals(confirmed)) {
-                booking.setStatus(Booking.BookingStatus.CONFIRMED);
-                bookingRepository.save(booking);
-                log.info("Booking CONFIRMED: id={}", booking.getId());
-            } else {
+                if (Boolean.TRUE.equals(confirmed)) {
+                    booking.setStatus(Booking.BookingStatus.CONFIRMED);
+                    bookingRepository.save(booking);
+                    log.info("Booking CONFIRMED: id={}", booking.getId());
+                } else {
+                    booking.setStatus(Booking.BookingStatus.CANCELLED);
+                    bookingRepository.save(booking);
+                    log.warn("Booking CANCELLED (room not available): id={}", booking.getId());
+                    throw new ServiceUnavailableException("Room not available");
+                }
+            } catch (ServiceUnavailableException e) {
+                // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Даже если выбросили ServiceUnavailableException, нужно откатить бронь
                 booking.setStatus(Booking.BookingStatus.CANCELLED);
                 bookingRepository.save(booking);
-                log.warn("Booking CANCELLED (room not available): id={}", booking.getId());
-                throw new ServiceUnavailableException("Room not available");
-            }
-        } catch (ServiceUnavailableException e) {
-            throw e;
-        } catch (Exception e) {
-            booking.setStatus(Booking.BookingStatus.CANCELLED);
-            bookingRepository.save(booking);
-            log.error("Booking CANCELLED due to error: id={}, error={}", booking.getId(), e.getMessage());
+                log.error("Booking CANCELLED due to ServiceUnavailableException: id={}, error={}", booking.getId(), e.getMessage());
+                throw e;
+            } catch (Exception e) {
+                booking.setStatus(Booking.BookingStatus.CANCELLED);
+                bookingRepository.save(booking);
+                log.error("Booking CANCELLED due to error: id={}, error={}", booking.getId(), e.getMessage());
 
-            try {
-                hotelServiceClient.releaseRoom(roomId, request.getRequestId());
-                log.info("Room released after compensation: roomId={}, requestId={}", roomId, request.getRequestId());
-            } catch (Exception ex) {
-                log.error("Failed to release room: {}", ex.getMessage());
+                try {
+                    hotelServiceClient.releaseRoom(roomId, request.getRequestId());
+                    log.info("Room released after compensation: roomId={}, requestId={}", roomId, request.getRequestId());
+                } catch (Exception ex) {
+                    log.error("Failed to release room: {}", ex.getMessage());
+                }
+                throw new ServiceUnavailableException("Booking failed: " + e.getMessage());
             }
-            throw new ServiceUnavailableException("Booking failed: " + e.getMessage());
+        } else {
+            // Если autoSelect, мы уже подтвердили доступность на этапе выбора
+            booking.setStatus(Booking.BookingStatus.CONFIRMED);
+            bookingRepository.save(booking);
+            log.info("Booking CONFIRMED (autoSelect): id={}", booking.getId());
         }
 
         return toDto(booking);

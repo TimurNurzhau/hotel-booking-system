@@ -78,7 +78,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(FeignException.class)
     public ResponseEntity<ErrorDTO> handleFeign(FeignException ex, HttpServletRequest request) {
-        log.error("Feign error: {}", ex.getMessage());
+        log.error("Feign error: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(buildError(HttpStatus.SERVICE_UNAVAILABLE,
                         "Hotel service unavailable: " + ex.getMessage(), request));
