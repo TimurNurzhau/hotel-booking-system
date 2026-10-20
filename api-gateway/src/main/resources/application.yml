@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: api-gateway
+  reactor:
+    context-propagation: auto  # <-- КЛЮЧЕВАЯ НАСТРОЙКА ДЛЯ WEBFLUX
   cloud:
     gateway:
       routes:
