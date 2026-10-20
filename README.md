@@ -157,7 +157,7 @@ Hotel Service: /swagger-ui/index.html
 
 Пример сквозного трейса:
 
-https://github.com/TimurNurzhau/hotel-booking-system/blob/main/docs/zipkin-trace.png?raw=true
+https://github.com/TimurNurzhau/hotel-booking-system/blob/main/docs/zipkin-trace.png
 
 Тесты
 Команда запуска:
