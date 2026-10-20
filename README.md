@@ -120,7 +120,7 @@ Hotel Service: http://localhost:8081/swagger-ui/index.html
 
 Пример сквозного трейса:
 
-https://docs/zipkin-trace.png
+https://github.com/TimurNurzhau/hotel-booking-system/blob/main/docs/zipkin-trace.png?raw=true
 
 Тесты
 
