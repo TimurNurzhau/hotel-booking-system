@@ -26,6 +26,9 @@ eureka:
     service-url:
       defaultZone: http://localhost:8761/eureka/
 
+jwt:
+  secret: mySuperSecretKeyForHotelBookingSystem1234567890
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
