@@ -27,9 +27,25 @@ public class RoomController {
         return ResponseEntity.ok(roomService.getAllAvailableRooms());
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<RoomDto> getRoomById(@PathVariable Long id) {
+        return ResponseEntity.ok(roomService.getRoomById(id));
+    }
+
     @GetMapping("/recommend")
     public ResponseEntity<List<RoomDto>> getRecommendedRooms() {
         return ResponseEntity.ok(roomService.getRecommendedRooms());
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<RoomDto> updateRoom(@PathVariable Long id, @RequestBody RoomDto roomDto) {
+        return ResponseEntity.ok(roomService.updateRoom(id, roomDto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteRoom(@PathVariable Long id) {
+        roomService.deleteRoom(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/confirm-availability")

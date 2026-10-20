@@ -28,4 +28,26 @@ public class HotelService {
                 .map(h -> new HotelDto(h.getId(), h.getName(), h.getAddress()))
                 .collect(Collectors.toList());
     }
+
+    public HotelDto getHotelById(Long id) {
+        Hotel hotel = hotelRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Hotel not found with id: " + id));
+        return new HotelDto(hotel.getId(), hotel.getName(), hotel.getAddress());
+    }
+
+    public HotelDto updateHotel(Long id, HotelDto hotelDto) {
+        Hotel hotel = hotelRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Hotel not found with id: " + id));
+        hotel.setName(hotelDto.getName());
+        hotel.setAddress(hotelDto.getAddress());
+        Hotel updated = hotelRepository.save(hotel);
+        return new HotelDto(updated.getId(), updated.getName(), updated.getAddress());
+    }
+
+    public void deleteHotel(Long id) {
+        if (!hotelRepository.existsById(id)) {
+            throw new RuntimeException("Hotel not found with id: " + id);
+        }
+        hotelRepository.deleteById(id);
+    }
 }

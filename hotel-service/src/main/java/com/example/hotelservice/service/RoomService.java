@@ -36,19 +36,42 @@ public class RoomService {
 
     public List<RoomDto> getAllAvailableRooms() {
         return roomRepository.findByAvailableTrue().stream()
-                .map(r -> new RoomDto(r.getId(), r.getHotel().getId(), r.getNumber(), r.getAvailable(), r.getTimesBooked()))
+                .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    public RoomDto getRoomById(Long id) {
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Room not found with id: " + id));
+        return toDto(room);
     }
 
     public List<RoomDto> getRecommendedRooms() {
         return roomRepository.findByAvailableTrueOrderByTimesBookedAscIdAsc().stream()
-                .map(r -> new RoomDto(r.getId(), r.getHotel().getId(), r.getNumber(), r.getAvailable(), r.getTimesBooked()))
+                .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    public RoomDto updateRoom(Long id, RoomDto roomDto) {
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Room not found with id: " + id));
+        room.setNumber(roomDto.getNumber());
+        if (roomDto.getAvailable() != null) {
+            room.setAvailable(roomDto.getAvailable());
+        }
+        Room updated = roomRepository.save(room);
+        return toDto(updated);
+    }
+
+    public void deleteRoom(Long id) {
+        if (!roomRepository.existsById(id)) {
+            throw new RuntimeException("Room not found with id: " + id);
+        }
+        roomRepository.deleteById(id);
     }
 
     @Transactional
     public boolean confirmAvailability(Long roomId, AvailabilityRequest request) {
-        // Пессимистичная блокировка: второй параллельный запрос ждёт, пока первый не завершит транзакцию
         Room room = roomRepository.findByIdWithLock(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found with id: " + roomId));
 
@@ -69,5 +92,9 @@ public class RoomService {
             room.setTimesBooked(room.getTimesBooked() - 1);
             roomRepository.save(room);
         }
+    }
+
+    private RoomDto toDto(Room room) {
+        return new RoomDto(room.getId(), room.getHotel().getId(), room.getNumber(), room.getAvailable(), room.getTimesBooked());
     }
 }

@@ -25,4 +25,20 @@ public class HotelController {
     public ResponseEntity<List<HotelDto>> getAllHotels() {
         return ResponseEntity.ok(hotelService.getAllHotels());
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<HotelDto> getHotelById(@PathVariable Long id) {
+        return ResponseEntity.ok(hotelService.getHotelById(id));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<HotelDto> updateHotel(@PathVariable Long id, @RequestBody HotelDto hotelDto) {
+        return ResponseEntity.ok(hotelService.updateHotel(id, hotelDto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteHotel(@PathVariable Long id) {
+        hotelService.deleteHotel(id);
+        return ResponseEntity.noContent().build();
+    }
 }
