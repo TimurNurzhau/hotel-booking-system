@@ -4,6 +4,7 @@ import com.example.bookingservice.client.HotelServiceClient;
 import com.example.bookingservice.dto.AvailabilityRequest;
 import com.example.bookingservice.dto.BookingRequest;
 import com.example.bookingservice.dto.RoomDto;
+import com.example.bookingservice.entity.Booking;
 import com.example.bookingservice.entity.User;
 import com.example.bookingservice.repository.BookingRepository;
 import com.example.bookingservice.repository.UserRepository;
@@ -22,9 +23,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -123,5 +131,34 @@ class BookingControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void createBooking_whenHotelServiceFails_shouldCancelAndReturn503() throws Exception {
+        // Настраиваем Feign-клиент так, чтобы confirmAvailability упал с ошибкой
+        when(hotelServiceClient.confirmAvailability(anyLong(), any(AvailabilityRequest.class)))
+                .thenThrow(new RuntimeException("Hotel service is down"));
+        doNothing().when(hotelServiceClient).releaseRoom(anyLong(), anyString());
+
+        BookingRequest request = new BookingRequest();
+        request.setStartDate(LocalDate.of(2026, 12, 1));
+        request.setEndDate(LocalDate.of(2026, 12, 5));
+        request.setAutoSelect(true);
+        request.setRequestId("req-fail-1");
+
+        // Ожидаем 503
+        mockMvc.perform(post("/booking")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isServiceUnavailable());
+
+        // Проверяем, что бронирование сохранено со статусом CANCELLED
+        Optional<Booking> cancelledBooking = bookingRepository.findByRequestId("req-fail-1");
+        assertEquals(true, cancelledBooking.isPresent());
+        assertEquals(Booking.BookingStatus.CANCELLED, cancelledBooking.get().getStatus());
+
+        // Проверяем, что компенсация (releaseRoom) была вызвана
+        verify(hotelServiceClient, times(1)).releaseRoom(eq(1L), eq("req-fail-1"));
     }
 }

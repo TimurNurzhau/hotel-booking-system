@@ -32,7 +32,7 @@ public class BookingService {
     private final UserRepository userRepository;
     private final HotelServiceClient hotelServiceClient;
 
-    @Transactional
+    @Transactional(noRollbackFor = ServiceUnavailableException.class)
     public BookingDto createBooking(BookingRequest request, String username) {
         if (request.getStartDate() == null || request.getEndDate() == null) {
             throw new BadRequestException("startDate and endDate are required");
