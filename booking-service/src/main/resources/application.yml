@@ -33,7 +33,7 @@ eureka:
 
 jwt:
   secret: mySuperSecretKeyForHotelBookingSystem1234567890
-  expiration: 3600000 # 1 ??? ? ?????????????
+  expiration: 3600000  # 1 hour
 
 springdoc:
   swagger-ui:
