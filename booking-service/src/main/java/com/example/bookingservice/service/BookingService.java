@@ -41,6 +41,7 @@ public class BookingService {
         if (request.getRequestId() != null) {
             Optional<Booking> existing = bookingRepository.findByRequestId(request.getRequestId());
             if (existing.isPresent()) {
+                log.info("Idempotent request detected. Returning existing booking id={}", existing.get().getId());
                 return toDto(existing.get());
             }
         }
@@ -105,6 +106,7 @@ public class BookingService {
 
             try {
                 hotelServiceClient.releaseRoom(roomId);
+                log.info("Room released after compensation: roomId={}", roomId);
             } catch (Exception ex) {
                 log.error("Failed to release room: {}", ex.getMessage());
             }
@@ -146,9 +148,11 @@ public class BookingService {
         }
         booking.setStatus(Booking.BookingStatus.CANCELLED);
         bookingRepository.save(booking);
+        log.info("Booking CANCELLED by user: id={}", id);
 
         try {
             hotelServiceClient.releaseRoom(booking.getRoomId());
+            log.info("Room released after cancellation: roomId={}", booking.getRoomId());
         } catch (Exception e) {
             log.error("Failed to release room: {}", e.getMessage());
         }

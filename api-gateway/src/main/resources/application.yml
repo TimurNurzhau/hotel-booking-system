@@ -29,6 +29,8 @@ jwt:
   secret: mySuperSecretKeyForHotelBookingSystem1234567890
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{correlationId:-no-trace}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"
   level:
     org.springframework.cloud.gateway: INFO
     com.example.apigateway: DEBUG

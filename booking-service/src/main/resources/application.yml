@@ -67,6 +67,8 @@ management:
       show-details: always
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{correlationId:-no-trace}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"
   level:
     org.springframework.security: DEBUG
     io.github.resilience4j: DEBUG
