@@ -48,17 +48,14 @@ public class RoomService {
 
     @Transactional
     public boolean confirmAvailability(Long roomId, AvailabilityRequest request) {
-        // В реальном приложении здесь была бы проверка на пересечение дат.
-        // Для простоты мы просто проверяем, что комната существует и доступна.
-        // requestId можно использовать для идемпотентности (сохранять в отдельной таблице или кэше).
-        Room room = roomRepository.findById(roomId)
+        // Пессимистичная блокировка: второй параллельный запрос ждёт, пока первый не завершит транзакцию
+        Room room = roomRepository.findByIdWithLock(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found with id: " + roomId));
 
         if (!room.getAvailable()) {
             return false;
         }
 
-        // Увеличиваем счётчик бронирований (для статистики)
         room.setTimesBooked(room.getTimesBooked() + 1);
         roomRepository.save(room);
         return true;
@@ -66,8 +63,7 @@ public class RoomService {
 
     @Transactional
     public void releaseRoom(Long roomId) {
-        // Компенсация: уменьшаем счётчик, если бронирование отменено
-        Room room = roomRepository.findById(roomId)
+        Room room = roomRepository.findByIdWithLock(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found with id: " + roomId));
         if (room.getTimesBooked() > 0) {
             room.setTimesBooked(room.getTimesBooked() - 1);
