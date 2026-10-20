@@ -54,8 +54,8 @@ public class RoomController {
     }
 
     @PostMapping("/{id}/release")
-    public ResponseEntity<Void> releaseRoom(@PathVariable Long id) {
-        roomService.releaseRoom(id);
+    public ResponseEntity<Void> releaseRoom(@PathVariable Long id, @RequestParam(required = false) String requestId) {
+        roomService.releaseRoom(id, requestId);
         return ResponseEntity.ok().build();
     }
 }

@@ -4,21 +4,26 @@ import com.example.hotelservice.dto.AvailabilityRequest;
 import com.example.hotelservice.dto.RoomDto;
 import com.example.hotelservice.entity.Hotel;
 import com.example.hotelservice.entity.Room;
+import com.example.hotelservice.entity.RoomBooking;
 import com.example.hotelservice.repository.HotelRepository;
+import com.example.hotelservice.repository.RoomBookingRepository;
 import com.example.hotelservice.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RoomService {
 
     private final RoomRepository roomRepository;
     private final HotelRepository hotelRepository;
+    private final RoomBookingRepository roomBookingRepository;
 
     public RoomDto createRoom(Long hotelId, RoomDto roomDto) {
         Hotel hotel = hotelRepository.findById(hotelId)
@@ -31,7 +36,7 @@ public class RoomService {
         room.setTimesBooked(0);
 
         Room saved = roomRepository.save(room);
-        return new RoomDto(saved.getId(), hotelId, saved.getNumber(), saved.getAvailable(), saved.getTimesBooked());
+        return toDto(saved);
     }
 
     public List<RoomDto> getAllAvailableRooms() {
@@ -79,19 +84,54 @@ public class RoomService {
             return false;
         }
 
+        // Проверка идемпотентности: если уже есть бронь с таким requestId — возвращаем true
+        if (request.getRequestId() != null) {
+            if (roomBookingRepository.findByRequestId(request.getRequestId()).isPresent()) {
+                log.info("Idempotent confirmAvailability: requestId={} already processed", request.getRequestId());
+                return true;
+            }
+        }
+
+        // Проверка пересечения дат
+        boolean overlapping = roomBookingRepository.existsOverlapping(
+                roomId, request.getStartDate(), request.getEndDate());
+        if (overlapping) {
+            log.warn("Room {} is already booked for dates {} - {}", roomId, request.getStartDate(), request.getEndDate());
+            return false;
+        }
+
+        // Создаем запись о бронировании
+        RoomBooking roomBooking = new RoomBooking();
+        roomBooking.setRoomId(roomId);
+        roomBooking.setStartDate(request.getStartDate());
+        roomBooking.setEndDate(request.getEndDate());
+        roomBooking.setRequestId(request.getRequestId());
+        roomBookingRepository.save(roomBooking);
+
         room.setTimesBooked(room.getTimesBooked() + 1);
         roomRepository.save(room);
+
+        log.info("Room {} booked for dates {} - {}, requestId={}",
+                roomId, request.getStartDate(), request.getEndDate(), request.getRequestId());
         return true;
     }
 
     @Transactional
-    public void releaseRoom(Long roomId) {
+    public void releaseRoom(Long roomId, String requestId) {
         Room room = roomRepository.findByIdWithLock(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found with id: " + roomId));
+
+        // Удаляем запись о бронировании по requestId
+        if (requestId != null) {
+            roomBookingRepository.deleteByRoomIdAndRequestId(roomId, requestId);
+        }
+
         if (room.getTimesBooked() > 0) {
             room.setTimesBooked(room.getTimesBooked() - 1);
             roomRepository.save(room);
         }
+
+        log.info("Room {} released, requestId={}", roomId, requestId);
     }
 
     private RoomDto toDto(Room room) {

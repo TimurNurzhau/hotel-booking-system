@@ -22,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -109,8 +108,8 @@ public class BookingService {
             log.error("Booking CANCELLED due to error: id={}, error={}", booking.getId(), e.getMessage());
 
             try {
-                hotelServiceClient.releaseRoom(roomId);
-                log.info("Room released after compensation: roomId={}", roomId);
+                hotelServiceClient.releaseRoom(roomId, request.getRequestId());
+                log.info("Room released after compensation: roomId={}, requestId={}", roomId, request.getRequestId());
             } catch (Exception ex) {
                 log.error("Failed to release room: {}", ex.getMessage());
             }
@@ -153,8 +152,8 @@ public class BookingService {
         log.info("Booking CANCELLED by user: id={}", id);
 
         try {
-            hotelServiceClient.releaseRoom(booking.getRoomId());
-            log.info("Room released after cancellation: roomId={}", booking.getRoomId());
+            hotelServiceClient.releaseRoom(booking.getRoomId(), booking.getRequestId());
+            log.info("Room released after cancellation: roomId={}, requestId={}", booking.getRoomId(), booking.getRequestId());
         } catch (Exception e) {
             log.error("Failed to release room: {}", e.getMessage());
         }
