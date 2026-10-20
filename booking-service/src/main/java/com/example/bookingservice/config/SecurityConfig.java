@@ -32,7 +32,6 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        // Swagger / OpenAPI paths
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
@@ -40,13 +39,10 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**"
                         ).permitAll()
-                        // Auth endpoints
                         .requestMatchers("/user/register", "/user/auth").permitAll()
-                        // H2 console
                         .requestMatchers("/h2-console/**").permitAll()
-                        // Error path (important: avoid redirect loop)
                         .requestMatchers("/error").permitAll()
-                        // Everything else needs authentication
+                        .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
@@ -59,7 +55,6 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
-        // Allow H2 console frames
         http.headers(headers -> headers.frameOptions(frame -> frame.disable()));
 
         return http.build();

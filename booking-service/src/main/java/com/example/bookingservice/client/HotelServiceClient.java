@@ -2,6 +2,8 @@ package com.example.bookingservice.client;
 
 import com.example.bookingservice.dto.AvailabilityRequest;
 import com.example.bookingservice.dto.RoomDto;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,11 +16,17 @@ import java.util.List;
 public interface HotelServiceClient {
 
     @GetMapping("/api/rooms/recommend")
+    @Retry(name = "hotelService")
+    @CircuitBreaker(name = "hotelService")
     List<RoomDto> getRecommendedRooms();
 
     @PostMapping("/api/rooms/{id}/confirm-availability")
+    @Retry(name = "hotelService")
+    @CircuitBreaker(name = "hotelService")
     Boolean confirmAvailability(@PathVariable Long id, @RequestBody AvailabilityRequest request);
 
     @PostMapping("/api/rooms/{id}/release")
+    @Retry(name = "hotelService")
+    @CircuitBreaker(name = "hotelService")
     void releaseRoom(@PathVariable Long id);
 }
