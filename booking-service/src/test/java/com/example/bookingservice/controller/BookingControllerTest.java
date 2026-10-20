@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -34,6 +35,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -144,7 +146,8 @@ class BookingControllerTest {
         BookingRequest request = new BookingRequest();
         request.setStartDate(LocalDate.of(2026, 12, 1));
         request.setEndDate(LocalDate.of(2026, 12, 5));
-        request.setAutoSelect(true);
+        request.setAutoSelect(false); // Явно указываем комнату, чтобы проверить блок catch (Exception)
+        request.setRoomId(1L);
         request.setRequestId("req-fail-1");
 
         // Ожидаем 503
@@ -155,10 +158,68 @@ class BookingControllerTest {
 
         // Проверяем, что бронирование сохранено со статусом CANCELLED
         Optional<Booking> cancelledBooking = bookingRepository.findByRequestId("req-fail-1");
-        assertEquals(true, cancelledBooking.isPresent());
+        assertTrue(cancelledBooking.isPresent());
         assertEquals(Booking.BookingStatus.CANCELLED, cancelledBooking.get().getStatus());
 
         // Проверяем, что компенсация (releaseRoom) была вызвана
         verify(hotelServiceClient, times(1)).releaseRoom(eq(1L), eq("req-fail-1"));
+    }
+
+    // НОВЫЙ ТЕСТ: Проверка идемпотентности
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void createBooking_withSameRequestId_shouldReturnExisting() throws Exception {
+        BookingRequest request = new BookingRequest();
+        request.setStartDate(LocalDate.of(2026, 12, 1));
+        request.setEndDate(LocalDate.of(2026, 12, 5));
+        request.setAutoSelect(true);
+        request.setRequestId("req-idempotent-1");
+
+        // Первый вызов
+        mockMvc.perform(post("/booking")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        // Второй вызов с тем же requestId
+        mockMvc.perform(post("/booking")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated()) // По коду возвращается 201, но это существующая бронь
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        // Проверяем, что в БД только одна запись
+        assertEquals(1, bookingRepository.count());
+    }
+
+    // НОВЫЙ ТЕСТ: Проверка отмены бронирования
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void cancelBooking_shouldReturn200AndReleaseRoom() throws Exception {
+        // Создаем бронь напрямую в БД
+        User user = userRepository.findByUsername("testuser").orElseThrow();
+        Booking booking = new Booking();
+        booking.setUser(user);
+        booking.setRoomId(1L);
+        booking.setStartDate(LocalDate.of(2026, 12, 1));
+        booking.setEndDate(LocalDate.of(2026, 12, 5));
+        booking.setStatus(Booking.BookingStatus.CONFIRMED);
+        booking.setCreatedAt(java.time.LocalDateTime.now());
+        booking.setRequestId("req-cancel-1");
+        booking = bookingRepository.save(booking);
+
+        doNothing().when(hotelServiceClient).releaseRoom(anyLong(), anyString());
+
+        mockMvc.perform(delete("/booking/" + booking.getId()))
+                .andExpect(status().isOk());
+
+        // Проверяем статус в БД
+        Optional<Booking> cancelled = bookingRepository.findById(booking.getId());
+        assertTrue(cancelled.isPresent());
+        assertEquals(Booking.BookingStatus.CANCELLED, cancelled.get().getStatus());
+
+        // Проверяем, что вызвали releaseRoom
+        verify(hotelServiceClient, times(1)).releaseRoom(eq(1L), eq("req-cancel-1"));
     }
 }

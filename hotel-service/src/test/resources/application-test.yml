@@ -1,0 +1,45 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: hotel-service
+  datasource:
+    url: jdbc:h2:mem:hoteldb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+jwt:
+  secret: mySuperSecretKeyForHotelBookingSystem1234567890
+
+management:
+  tracing:
+    enabled: false
+  zipkin:
+    tracing:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-},%X{spanId:-}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"

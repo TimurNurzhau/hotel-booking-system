@@ -28,6 +28,9 @@ spring:
 
 eureka:
   client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
     service-url:
       defaultZone: http://localhost:8761/eureka/
 
@@ -57,20 +60,12 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         register-health-indicator: true
 
-logging:
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-},%X{spanId:-}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"
-  level:
-    org.springframework.security: DEBUG
-    io.github.resilience4j: DEBUG
-
 management:
   tracing:
-    sampling:
-      probability: 1.0
+    enabled: false
   zipkin:
     tracing:
-      endpoint: https://animated-space-yodel-q77v77j7qggx365gg-9411.app.github.dev/api/v2/spans
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -78,3 +73,10 @@ management:
   endpoint:
     health:
       show-details: always
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-},%X{spanId:-}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"
+  level:
+    org.springframework.security: DEBUG
+    io.github.resilience4j: DEBUG
