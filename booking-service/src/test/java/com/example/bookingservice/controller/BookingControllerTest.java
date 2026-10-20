@@ -25,7 +25,6 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -104,10 +103,13 @@ class BookingControllerTest {
 
     @Test
     @WithMockUser(username = "testuser", roles = "USER")
-    void getUserBookings_shouldReturn200() throws Exception {
-        mockMvc.perform(get("/booking/bookings"))
+    void getUserBookings_shouldReturn200AndPage() throws Exception {
+        mockMvc.perform(get("/booking/bookings")
+                        .param("page", "0")
+                        .param("size", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").isNumber());
     }
 
     @Test

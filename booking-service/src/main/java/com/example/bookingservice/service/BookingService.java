@@ -12,6 +12,10 @@ import com.example.bookingservice.repository.BookingRepository;
 import com.example.bookingservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -116,12 +120,11 @@ public class BookingService {
         return toDto(booking);
     }
 
-    public List<BookingDto> getUserBookings(String username) {
+    public Page<BookingDto> getUserBookings(String username, int page, int size) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new NotFoundException("User not found: " + username));
-        return bookingRepository.findByUserId(user.getId()).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return bookingRepository.findByUserId(user.getId(), pageable).map(this::toDto);
     }
 
     public BookingDto getBookingById(Long id, String username) {
@@ -133,10 +136,9 @@ public class BookingService {
         return toDto(booking);
     }
 
-    public List<BookingDto> getAllBookings() {
-        return bookingRepository.findAll().stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+    public Page<BookingDto> getAllBookings(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return bookingRepository.findAll(pageable).map(this::toDto);
     }
 
     @Transactional

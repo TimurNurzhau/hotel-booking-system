@@ -4,13 +4,12 @@ import com.example.bookingservice.dto.BookingDto;
 import com.example.bookingservice.dto.BookingRequest;
 import com.example.bookingservice.service.BookingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/booking")
@@ -28,9 +27,11 @@ public class BookingController {
 
     @GetMapping("/bookings")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    public ResponseEntity<List<BookingDto>> getUserBookings() {
+    public ResponseEntity<Page<BookingDto>> getUserBookings(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return ResponseEntity.ok(bookingService.getUserBookings(username));
+        return ResponseEntity.ok(bookingService.getUserBookings(username, page, size));
     }
 
     @GetMapping("/{id}")
@@ -50,7 +51,9 @@ public class BookingController {
 
     @GetMapping("/admin/all")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<BookingDto>> getAllBookings() {
-        return ResponseEntity.ok(bookingService.getAllBookings());
+    public ResponseEntity<Page<BookingDto>> getAllBookings(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(bookingService.getAllBookings(page, size));
     }
 }
