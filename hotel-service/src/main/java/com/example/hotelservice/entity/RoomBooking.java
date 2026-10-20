@@ -8,8 +8,9 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "room_bookings", indexes = {
-    @Index(name = "idx_room_dates", columnList = "roomId, startDate, endDate")
+// ИСПРАВЛЕНИЕ: Добавлен UniqueConstraint для защиты от параллельных дубликатов
+@Table(name = "room_bookings", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_room_dates", columnNames = {"roomId", "startDate", "endDate"})
 })
 @Data
 @NoArgsConstructor

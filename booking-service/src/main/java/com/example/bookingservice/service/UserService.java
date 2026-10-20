@@ -36,11 +36,9 @@ public class UserService {
         User user = new User();
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        if (request.getUsername().toLowerCase().contains("admin")) {
-            user.setRole("ADMIN");
-        } else {
-            user.setRole("USER");
-        }
+        // ИСПРАВЛЕНИЕ: Публичная регистрация всегда выдает роль USER.
+        // Роль ADMIN выдается только через административные эндпоинты или DataInitializer.
+        user.setRole("USER");
         userRepository.save(user);
 
         String token = jwtTokenProvider.generateToken(user.getUsername(), user.getRole());

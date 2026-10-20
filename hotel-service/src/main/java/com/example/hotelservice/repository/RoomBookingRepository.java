@@ -19,6 +19,4 @@ public interface RoomBookingRepository extends JpaRepository<RoomBooking, Long> 
                               @Param("endDate") LocalDate endDate);
 
     Optional<RoomBooking> findByRequestId(String requestId);
-
-    void deleteByRoomIdAndRequestId(Long roomId, String requestId);
 }

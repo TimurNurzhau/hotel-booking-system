@@ -11,11 +11,13 @@ import com.example.hotelservice.repository.RoomBookingRepository;
 import com.example.hotelservice.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -111,7 +113,15 @@ public class RoomService {
         roomBooking.setStartDate(request.getStartDate());
         roomBooking.setEndDate(request.getEndDate());
         roomBooking.setRequestId(request.getRequestId());
-        roomBookingRepository.save(roomBooking);
+
+        // ИСПРАВЛЕНИЕ: Ловим DataIntegrityViolationException на случай гонки данных
+        try {
+            roomBookingRepository.saveAndFlush(roomBooking);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Concurrent booking detected for room {} dates {} - {}",
+                    roomId, request.getStartDate(), request.getEndDate());
+            return false;
+        }
 
         room.setTimesBooked(room.getTimesBooked() + 1);
         roomRepository.save(room);
@@ -126,16 +136,25 @@ public class RoomService {
         Room room = roomRepository.findByIdWithLock(roomId)
                 .orElseThrow(() -> new NotFoundException("Room not found with id: " + roomId));
 
+        boolean released = false;
+
         if (requestId != null) {
-            roomBookingRepository.deleteByRoomIdAndRequestId(roomId, requestId);
+            // ИСПРАВЛЕНИЕ: Сначала проверяем, существует ли бронь, и только потом удаляем
+            Optional<RoomBooking> booking = roomBookingRepository.findByRequestId(requestId);
+            if (booking.isPresent() && booking.get().getRoomId().equals(roomId)) {
+                roomBookingRepository.delete(booking.get());
+                released = true;
+            }
         }
 
-        if (room.getTimesBooked() > 0) {
+        // ИСПРАВЛЕНИЕ: Декрементим счетчик только если реально удалили запись
+        if (released && room.getTimesBooked() > 0) {
             room.setTimesBooked(room.getTimesBooked() - 1);
             roomRepository.save(room);
+            log.info("Room {} released, requestId={}", roomId, requestId);
+        } else {
+            log.info("Room {} release skipped (idempotent call or no booking found), requestId={}", roomId, requestId);
         }
-
-        log.info("Room {} released, requestId={}", roomId, requestId);
     }
 
     private RoomDto toDto(Room room) {
