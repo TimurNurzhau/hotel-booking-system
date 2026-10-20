@@ -37,6 +37,11 @@ public class RoomController {
         return ResponseEntity.ok(roomService.getRecommendedRooms());
     }
 
+    @GetMapping("/stats")
+    public ResponseEntity<List<RoomDto>> getRoomStats() {
+        return ResponseEntity.ok(roomService.getRoomStats());
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<RoomDto> updateRoom(@PathVariable Long id, @RequestBody RoomDto roomDto) {
         return ResponseEntity.ok(roomService.updateRoom(id, roomDto));

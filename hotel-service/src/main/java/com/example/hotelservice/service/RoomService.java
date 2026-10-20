@@ -10,6 +10,7 @@ import com.example.hotelservice.repository.RoomBookingRepository;
 import com.example.hotelservice.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +54,12 @@ public class RoomService {
 
     public List<RoomDto> getRecommendedRooms() {
         return roomRepository.findByAvailableTrueOrderByTimesBookedAscIdAsc().stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
+    public List<RoomDto> getRoomStats() {
+        return roomRepository.findAll(Sort.by(Sort.Direction.DESC, "timesBooked")).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
