@@ -58,6 +58,12 @@ resilience4j:
         register-health-indicator: true
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
   endpoints:
     web:
       exposure:
@@ -68,7 +74,7 @@ management:
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{correlationId:-no-trace}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{traceId:-},%X{spanId:-}] ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n"
   level:
     org.springframework.security: DEBUG
     io.github.resilience4j: DEBUG
