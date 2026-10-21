@@ -6,6 +6,7 @@ import com.example.hotelservice.entity.Hotel;
 import com.example.hotelservice.entity.Room;
 import com.example.hotelservice.entity.RoomBooking;
 import com.example.hotelservice.exception.NotFoundException;
+import com.example.hotelservice.mapper.RoomMapper;
 import com.example.hotelservice.repository.HotelRepository;
 import com.example.hotelservice.repository.RoomBookingRepository;
 import com.example.hotelservice.repository.RoomRepository;
@@ -18,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -28,6 +28,7 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final HotelRepository hotelRepository;
     private final RoomBookingRepository roomBookingRepository;
+    private final RoomMapper roomMapper;
 
     public RoomDto createRoom(Long hotelId, RoomDto roomDto) {
         Hotel hotel = hotelRepository.findById(hotelId)
@@ -40,31 +41,31 @@ public class RoomService {
         room.setTimesBooked(0);
 
         Room saved = roomRepository.save(room);
-        return toDto(saved);
+        return roomMapper.toDto(saved);
     }
 
     public List<RoomDto> getAllAvailableRooms() {
         return roomRepository.findByAvailableTrue().stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+                .map(roomMapper::toDto)
+                .toList();
     }
 
     public RoomDto getRoomById(Long id) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Room not found with id: " + id));
-        return toDto(room);
+        return roomMapper.toDto(room);
     }
 
     public List<RoomDto> getRecommendedRooms() {
         return roomRepository.findByAvailableTrueOrderByTimesBookedAscIdAsc().stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+                .map(roomMapper::toDto)
+                .toList();
     }
 
     public List<RoomDto> getRoomStats() {
         return roomRepository.findAll(Sort.by(Sort.Direction.DESC, "timesBooked")).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+                .map(roomMapper::toDto)
+                .toList();
     }
 
     public RoomDto updateRoom(Long id, RoomDto roomDto) {
@@ -75,7 +76,7 @@ public class RoomService {
             room.setAvailable(roomDto.getAvailable());
         }
         Room updated = roomRepository.save(room);
-        return toDto(updated);
+        return roomMapper.toDto(updated);
     }
 
     public void deleteRoom(Long id) {
@@ -114,7 +115,6 @@ public class RoomService {
         roomBooking.setEndDate(request.getEndDate());
         roomBooking.setRequestId(request.getRequestId());
 
-        // ИСПРАВЛЕНИЕ: Ловим DataIntegrityViolationException на случай гонки данных
         try {
             roomBookingRepository.saveAndFlush(roomBooking);
         } catch (DataIntegrityViolationException e) {
@@ -139,7 +139,6 @@ public class RoomService {
         boolean released = false;
 
         if (requestId != null) {
-            // ИСПРАВЛЕНИЕ: Сначала проверяем, существует ли бронь, и только потом удаляем
             Optional<RoomBooking> booking = roomBookingRepository.findByRequestId(requestId);
             if (booking.isPresent() && booking.get().getRoomId().equals(roomId)) {
                 roomBookingRepository.delete(booking.get());
@@ -147,7 +146,6 @@ public class RoomService {
             }
         }
 
-        // ИСПРАВЛЕНИЕ: Декрементим счетчик только если реально удалили запись
         if (released && room.getTimesBooked() > 0) {
             room.setTimesBooked(room.getTimesBooked() - 1);
             roomRepository.save(room);
@@ -155,9 +153,5 @@ public class RoomService {
         } else {
             log.info("Room {} release skipped (idempotent call or no booking found), requestId={}", roomId, requestId);
         }
-    }
-
-    private RoomDto toDto(Room room) {
-        return new RoomDto(room.getId(), room.getHotel().getId(), room.getNumber(), room.getAvailable(), room.getTimesBooked());
     }
 }

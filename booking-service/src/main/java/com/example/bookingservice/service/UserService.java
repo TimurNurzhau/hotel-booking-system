@@ -5,6 +5,7 @@ import com.example.bookingservice.entity.User;
 import com.example.bookingservice.exception.BadRequestException;
 import com.example.bookingservice.exception.ConflictException;
 import com.example.bookingservice.exception.NotFoundException;
+import com.example.bookingservice.mapper.UserMapper;
 import com.example.bookingservice.repository.UserRepository;
 import com.example.bookingservice.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +13,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +21,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final UserMapper userMapper;
 
     public AuthResponse register(RegisterRequest request) {
         if (request.getUsername() == null || request.getUsername().isBlank()) {
@@ -36,8 +37,6 @@ public class UserService {
         User user = new User();
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        // ИСПРАВЛЕНИЕ: Публичная регистрация всегда выдает роль USER.
-        // Роль ADMIN выдается только через административные эндпоинты или DataInitializer.
         user.setRole("USER");
         userRepository.save(user);
 
@@ -72,7 +71,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(role != null ? role : "USER");
         userRepository.save(user);
-        return new UserDto(user.getId(), user.getUsername(), user.getRole());
+        return userMapper.toDto(user);
     }
 
     public UserDto updateUser(Long id, UpdateUserRequest request) {
@@ -85,7 +84,7 @@ public class UserService {
             user.setRole(request.getRole());
         }
         userRepository.save(user);
-        return new UserDto(user.getId(), user.getUsername(), user.getRole());
+        return userMapper.toDto(user);
     }
 
     public void deleteUser(Long id) {
@@ -96,8 +95,6 @@ public class UserService {
     }
 
     public List<UserDto> getAllUsers() {
-        return userRepository.findAll().stream()
-                .map(u -> new UserDto(u.getId(), u.getUsername(), u.getRole()))
-                .collect(Collectors.toList());
+        return userMapper.toDtoList(userRepository.findAll());
     }
 }

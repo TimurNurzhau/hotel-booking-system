@@ -25,7 +25,7 @@ Micrometer Tracing + Zipkin для сквозной распределённой
 
 Springdoc OpenAPI, Swagger UI.
 
-Lombok, Maven, JUnit 5 и MockMvc.
+Lombok, MapStruct, Maven, JUnit 5 и MockMvc.
 
 GitHub Actions для CI.
 
@@ -81,6 +81,8 @@ Retry и CircuitBreaker. Вызовы hotel-service обёрнуты в Resilien
 Предзаполнение данных. DataInitializer создаёт 2 отеля и 4 номера при старте hotel-service, а также пользователей admin/admin123 и user/user123 при старте booking-service.
 
 Мониторинг и трассировка. Actuator: /actuator/health, /actuator/circuitbreakers, /actuator/retries. Сквозная трассировка через Zipkin.
+
+Маппинг DTO. Реализован через MapStruct (генерация на этапе компиляции, без рефлексии).
 
 Требования
 JDK 17 или выше.

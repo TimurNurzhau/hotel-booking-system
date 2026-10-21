@@ -8,6 +8,7 @@ import com.example.bookingservice.exception.BadRequestException;
 import com.example.bookingservice.exception.ForbiddenException;
 import com.example.bookingservice.exception.NotFoundException;
 import com.example.bookingservice.exception.ServiceUnavailableException;
+import com.example.bookingservice.mapper.BookingMapper;
 import com.example.bookingservice.repository.BookingRepository;
 import com.example.bookingservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,10 +32,10 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final HotelServiceClient hotelServiceClient;
+    private final BookingMapper bookingMapper;
 
     @Transactional(noRollbackFor = ServiceUnavailableException.class)
     public BookingDto createBooking(BookingRequest request, String username) {
-        // 1. Валидация дат
         if (request.getStartDate() == null || request.getEndDate() == null) {
             throw new BadRequestException("startDate and endDate are required");
         }
@@ -42,20 +43,17 @@ public class BookingService {
             throw new BadRequestException("startDate must be before or equal to endDate");
         }
 
-        // 2. Проверка идемпотентности
         if (request.getRequestId() != null) {
             Optional<Booking> existing = bookingRepository.findByRequestId(request.getRequestId());
             if (existing.isPresent()) {
                 log.info("Idempotent request detected. Returning existing booking id={}", existing.get().getId());
-                return toDto(existing.get());
+                return bookingMapper.toDto(existing.get());
             }
         }
 
-        // 3. Поиск пользователя
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new NotFoundException("User not found: " + username));
 
-        // 4. Выбор комнаты
         Long roomId = request.getRoomId();
         if (request.isAutoSelect()) {
             List<RoomDto> recommended;
@@ -68,7 +66,6 @@ public class BookingService {
                 throw new ServiceUnavailableException("No available rooms");
             }
 
-            // Ищем первую комнату, которая реально доступна
             boolean found = false;
             for (RoomDto room : recommended) {
                 try {
@@ -85,7 +82,6 @@ public class BookingService {
                     }
                 } catch (Exception e) {
                     log.warn("Failed to check availability for room {}: {}", room.getId(), e.getMessage());
-                    // Продолжаем проверять следующие комнаты
                 }
             }
 
@@ -98,7 +94,6 @@ public class BookingService {
             throw new BadRequestException("roomId is required when autoSelect=false");
         }
 
-        // 5. Создание бронирования в статусе PENDING
         Booking booking = new Booking();
         booking.setUser(user);
         booking.setRoomId(roomId);
@@ -111,7 +106,6 @@ public class BookingService {
 
         log.info("Booking created in PENDING: id={}, roomId={}", booking.getId(), roomId);
 
-        // 6. Вызов Hotel Service для подтверждения (если не autoSelect, т.к. там уже подтвердили)
         if (!request.isAutoSelect()) {
             try {
                 AvailabilityRequest availabilityRequest = new AvailabilityRequest();
@@ -132,7 +126,6 @@ public class BookingService {
                     throw new ServiceUnavailableException("Room not available");
                 }
             } catch (ServiceUnavailableException e) {
-                // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Даже если выбросили ServiceUnavailableException, нужно откатить бронь
                 booking.setStatus(Booking.BookingStatus.CANCELLED);
                 bookingRepository.save(booking);
                 log.error("Booking CANCELLED due to ServiceUnavailableException: id={}, error={}", booking.getId(), e.getMessage());
@@ -151,20 +144,19 @@ public class BookingService {
                 throw new ServiceUnavailableException("Booking failed: " + e.getMessage());
             }
         } else {
-            // Если autoSelect, мы уже подтвердили доступность на этапе выбора
             booking.setStatus(Booking.BookingStatus.CONFIRMED);
             bookingRepository.save(booking);
             log.info("Booking CONFIRMED (autoSelect): id={}", booking.getId());
         }
 
-        return toDto(booking);
+        return bookingMapper.toDto(booking);
     }
 
     public Page<BookingDto> getUserBookings(String username, int page, int size) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new NotFoundException("User not found: " + username));
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return bookingRepository.findByUserId(user.getId(), pageable).map(this::toDto);
+        return bookingRepository.findByUserId(user.getId(), pageable).map(bookingMapper::toDto);
     }
 
     public BookingDto getBookingById(Long id, String username) {
@@ -173,12 +165,12 @@ public class BookingService {
         if (!booking.getUser().getUsername().equals(username)) {
             throw new ForbiddenException("Access denied to booking id=" + id);
         }
-        return toDto(booking);
+        return bookingMapper.toDto(booking);
     }
 
     public Page<BookingDto> getAllBookings(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return bookingRepository.findAll(pageable).map(this::toDto);
+        return bookingRepository.findAll(pageable).map(bookingMapper::toDto);
     }
 
     @Transactional
@@ -198,16 +190,5 @@ public class BookingService {
         } catch (Exception e) {
             log.error("Failed to release room: {}", e.getMessage());
         }
-    }
-
-    private BookingDto toDto(Booking booking) {
-        return new BookingDto(
-                booking.getId(),
-                booking.getRoomId(),
-                booking.getStartDate(),
-                booking.getEndDate(),
-                booking.getStatus().name(),
-                booking.getCreatedAt()
-        );
     }
 }
