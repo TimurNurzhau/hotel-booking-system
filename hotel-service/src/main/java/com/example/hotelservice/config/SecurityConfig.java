@@ -1,5 +1,6 @@
 package com.example.hotelservice.config;
 
+import com.example.hotelservice.security.InternalApiKeyFilter;
 import com.example.hotelservice.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final InternalApiKeyFilter internalApiKeyFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -42,8 +44,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").permitAll()
                         // Error
                         .requestMatchers("/error").permitAll()
-                        // Внутренние эндпоинты для Feign-вызовов из booking-service
-                        // ВАЖНО: В реальном проекте эти эндпоинты должны быть закрыты mTLS или API-Key!
+                        // Внутренние эндпоинты: защищены InternalApiKeyFilter,
+                        // поэтому здесь permitAll() — фильтр сам вернёт 401 при неверном ключе
                         .requestMatchers("/api/rooms/recommend").permitAll()
                         .requestMatchers("/api/rooms/*/confirm-availability").permitAll()
                         .requestMatchers("/api/rooms/*/release").permitAll()
@@ -58,6 +60,8 @@ public class SecurityConfig {
                         })
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // InternalApiKeyFilter должен идти ДО JwtAuthenticationFilter
+                .addFilterBefore(internalApiKeyFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         http.headers(headers -> headers.frameOptions(frame -> frame.disable()));

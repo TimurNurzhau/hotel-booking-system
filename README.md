@@ -53,7 +53,7 @@ Hotel Service — hoteldb
 
 Схема взаимодействия:
 Клиент -> API Gateway -> Booking Service / Hotel Service
-Booking Service -> Hotel Service (через Feign)
+Booking Service -> Hotel Service (через Feign с заголовком X-Internal-Key)
 Все сервисы -> Eureka Server (регистрация)
 Все сервисы -> Zipkin (трассировка)
 
@@ -73,6 +73,8 @@ Booking Service -> Hotel Service (через Feign)
 Retry и CircuitBreaker. Вызовы hotel-service обёрнуты в Resilience4J. При временной недоступности booking-service повторяет запрос (3 попытки, задержка 500 мс). При частых ошибках цепь размыкается, запросы не висят в таймаутах.
 
 Безопасность. JWT-фильтр на Gateway и в обоих сервисах (booking и hotel). Stateless-сессии, роли USER и ADMIN. @PreAuthorize на методах контроллера.
+
+Защита внутренних эндпоинтов. Эндпоинты /api/rooms/recommend, /api/rooms/{id}/confirm-availability и /api/rooms/{id}/release в hotel-service предназначены только для вызовов из booking-service. Они защищены кастомным заголовком X-Internal-Key, который автоматически добавляется Feign-интерцептором (FeignConfig) в booking-service и проверяется фильтром InternalApiKeyFilter в hotel-service. Запросы без корректного ключа возвращают 401 Unauthorized.
 
 Маршрутизация Gateway. Gateway срезает префиксы /api/bookings и /api/hotels перед передачей в сервисы. Например, запрос /api/hotels/api/rooms/stats доходит до RoomController как /api/rooms/stats.
 
@@ -171,8 +173,16 @@ https://github.com/TimurNurzhau/hotel-booking-system/blob/main/docs/zipkin-trace
 Команда запуска:
 
 bash
-mvn clean test -pl booking-service
-Покрытие: UserControllerTest (5 тестов), BookingControllerTest (8 тестов, включая тест на сагу, компенсацию и тайм-аут), BookingServiceUnitTest (1 тест на компенсацию при падении БД). Итого: 14 тестов. CI прогоняет тесты автоматически на каждый push.
+mvn clean test
+
+Покрытие:
+UserControllerTest — 5 тестов (регистрация, авторизация, негативные кейсы).
+BookingControllerTest — 8 тестов (создание, отмена, идемпотентность, тайм-аут, падение Feign).
+BookingServiceUnitTest — 1 тест (компенсация при падении БД после блокировки).
+BookingFlowIntegrationTest — 1 сквозной интеграционный тест (реальный HTTP-сервер, TestRestTemplate, WireMock для эмуляции падения hotel-service; проверяет статус 503 и переход брони в CANCELLED).
+RoomServiceTest — 1 тест (пересечение дат).
+RoomServiceConcurrencyTest — 1 тест (параллельные бронирования, PESSIMISTIC_WRITE плюс уникальный индекс).
+Итого: 17 тестов. CI прогоняет тесты автоматически на каждый push.
 
 ADR (Architecture Decision Records)
 Использование H2 in-memory вместо PostgreSQL.
@@ -186,6 +196,9 @@ ADR (Architecture Decision Records)
 
 Компенсация без CircuitBreaker.
 Решение: Метод releaseRoom в HotelServiceClient намеренно оставлен без @Retry и @CircuitBreaker. Если confirmAvailability падает, цепь размыкается, и компенсация не выполнилась бы. Поэтому releaseRoom вызывается напрямую, чтобы гарантировать откат блокировки даже при разомкнутой цепи.
+
+Защита внутренних эндпоинтов через X-Internal-Key.
+Решение: Внутренние эндпоинты hotel-service (recommend, confirm-availability, release) не должны быть доступны извне. Вместо mTLS (сложно для учебного проекта) используется кастомный заголовок X-Internal-Key: Feign-интерцептор в booking-service добавляет его автоматически, а InternalApiKeyFilter в hotel-service проверяет и возвращает 401 при несовпадении. Ключ хранится в application.yml обоих сервисов.
 
 CI/CD
 Workflow GitHub Actions находится в файле .github/workflows/ci.yml.

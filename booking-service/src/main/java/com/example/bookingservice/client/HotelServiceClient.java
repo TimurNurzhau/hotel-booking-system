@@ -1,5 +1,6 @@
 package com.example.bookingservice.client;
 
+import com.example.bookingservice.config.FeignConfig;
 import com.example.bookingservice.dto.AvailabilityRequest;
 import com.example.bookingservice.dto.RoomDto;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(name = "hotel-service")
+@FeignClient(name = "hotel-service", configuration = FeignConfig.class)
 public interface HotelServiceClient {
 
     @GetMapping("/api/rooms/recommend")

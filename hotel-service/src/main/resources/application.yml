@@ -29,6 +29,10 @@ eureka:
 jwt:
   secret: mySuperSecretKeyForHotelBookingSystem1234567890
 
+# НОВОЕ: ключ для внутренних вызовов между сервисами
+internal:
+  api-key: super-secret-internal-key
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
