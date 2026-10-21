@@ -74,6 +74,8 @@ Retry и CircuitBreaker. Вызовы hotel-service обёрнуты в Resilien
 
 Безопасность. JWT-фильтр на Gateway и в обоих сервисах (booking и hotel). Stateless-сессии, роли USER и ADMIN. @PreAuthorize на методах контроллера.
 
+Маршрутизация Gateway. Gateway срезает префиксы /api/bookings и /api/hotels перед передачей в сервисы. Например, запрос /api/hotels/api/rooms/stats доходит до RoomController как /api/rooms/stats.
+
 Обработка ошибок. @RestControllerAdvice и ErrorDTO с корректными статусами 400, 401, 403, 404, 409, 503.
 
 Документация. Swagger UI со схемой bearerAuth.
@@ -88,6 +90,8 @@ Retry и CircuitBreaker. Вызовы hotel-service обёрнуты в Resilien
 JDK 17 или выше.
 
 Maven 3.8 или выше.
+
+Свободные порты: 8080 (Gateway), 8081 (Hotel), 8082 (Booking), 8761 (Eureka), 9411 (Zipkin).
 
 Docker (для запуска Zipkin).
 
@@ -105,6 +109,8 @@ docker run -d -p 9411:9411 --name zipkin openzipkin/zipkin
 Затем ApiGatewayApplication (порт 8080).
 
 Подождите 10–20 секунд, пока сервисы зарегистрируются в Eureka.
+
+После запуска проверьте, что все сервисы видны в Eureka. В разделе Instances currently registered with Eureka должны быть API-GATEWAY, BOOKING-SERVICE и HOTEL-SERVICE
 
 Примеры запросов
 Регистрация:
@@ -127,7 +133,7 @@ curl -X POST /api/bookings/booking \
 Список своих бронирований (с пагинацией):
 
 bash
-curl -X GET "/api/bookings/booking/bookings?page=0&size=10" \
+curl -X GET "/api/bookings/bookings?page=0&size=10" \
 -H "Authorization: Bearer TOKEN"
 Отмена бронирования:
 
@@ -137,7 +143,7 @@ curl -X DELETE /api/bookings/booking/1 \
 Статистика загруженности номеров:
 
 bash
-curl -X GET /api/rooms/stats \
+curl -X GET /api/hotels/api/rooms/stats \
 -H "Authorization: Bearer TOKEN"
 Swagger UI
 Booking Service: /swagger-ui/index.html
@@ -166,7 +172,7 @@ https://github.com/TimurNurzhau/hotel-booking-system/blob/main/docs/zipkin-trace
 
 bash
 mvn clean test -pl booking-service
-Покрытие: UserControllerTest (5 тестов), BookingControllerTest (5 тестов, включая тест на сагу и компенсацию). CI прогоняет тесты автоматически на каждый push.
+Покрытие: UserControllerTest (5 тестов), BookingControllerTest (8 тестов, включая тест на сагу, компенсацию и тайм-аут), BookingServiceUnitTest (1 тест на компенсацию при падении БД). Итого: 14 тестов. CI прогоняет тесты автоматически на каждый push.
 
 ADR (Architecture Decision Records)
 Использование H2 in-memory вместо PostgreSQL.
@@ -177,6 +183,9 @@ ADR (Architecture Decision Records)
 
 Кастомный TraceId vs Micrometer Tracing.
 Решение: Сначала был реализован кастомный фильтр для TraceId (X-Correlation-Id). Затем он был заменён на стандартный Micrometer Tracing с Brave, так как это даёт интеграцию с Zipkin, автоматическое прокидывание контекста через Feign и реактивные цепочки Gateway.
+
+Компенсация без CircuitBreaker.
+Решение: Метод releaseRoom в HotelServiceClient намеренно оставлен без @Retry и @CircuitBreaker. Если confirmAvailability падает, цепь размыкается, и компенсация не выполнилась бы. Поэтому releaseRoom вызывается напрямую, чтобы гарантировать откат блокировки даже при разомкнутой цепи.
 
 CI/CD
 Workflow GitHub Actions находится в файле .github/workflows/ci.yml.

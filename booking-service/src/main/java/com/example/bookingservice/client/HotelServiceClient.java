@@ -26,8 +26,8 @@ public interface HotelServiceClient {
     @CircuitBreaker(name = "hotelService")
     Boolean confirmAvailability(@PathVariable Long id, @RequestBody AvailabilityRequest request);
 
+    // ВАЖНО: Убраны @Retry и @CircuitBreaker.
+    // Компенсация должна выполняться даже если основная цепь разомкнута.
     @PostMapping("/api/rooms/{id}/release")
-    @Retry(name = "hotelService")
-    @CircuitBreaker(name = "hotelService")
     void releaseRoom(@PathVariable Long id, @RequestParam(required = false) String requestId);
 }

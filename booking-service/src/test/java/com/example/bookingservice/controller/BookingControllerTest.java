@@ -78,6 +78,7 @@ class BookingControllerTest {
         RoomDto room = new RoomDto(1L, 1L, "101", true, 0);
         when(hotelServiceClient.getRecommendedRooms()).thenReturn(List.of(room));
         when(hotelServiceClient.confirmAvailability(anyLong(), any(AvailabilityRequest.class))).thenReturn(true);
+        doNothing().when(hotelServiceClient).releaseRoom(anyLong(), anyString());
     }
 
     @Test
@@ -114,7 +115,7 @@ class BookingControllerTest {
     @Test
     @WithMockUser(username = "testuser", roles = "USER")
     void getUserBookings_shouldReturn200AndPage() throws Exception {
-        mockMvc.perform(get("/booking/bookings")
+        mockMvc.perform(get("/bookings")
                         .param("page", "0")
                         .param("size", "10"))
                 .andExpect(status().isOk())
@@ -138,34 +139,52 @@ class BookingControllerTest {
     @Test
     @WithMockUser(username = "testuser", roles = "USER")
     void createBooking_whenHotelServiceFails_shouldCancelAndReturn503() throws Exception {
-        // Настраиваем Feign-клиент так, чтобы confirmAvailability упал с ошибкой
+        // Падение Feign-клиента при подтверждении. Блокировка не устанавливается,
+        // поэтому компенсация (releaseRoom) не требуется по логике саги.
         when(hotelServiceClient.confirmAvailability(anyLong(), any(AvailabilityRequest.class)))
                 .thenThrow(new RuntimeException("Hotel service is down"));
-        doNothing().when(hotelServiceClient).releaseRoom(anyLong(), anyString());
 
         BookingRequest request = new BookingRequest();
         request.setStartDate(LocalDate.of(2026, 12, 1));
         request.setEndDate(LocalDate.of(2026, 12, 5));
-        request.setAutoSelect(false); // Явно указываем комнату, чтобы проверить блок catch (Exception)
+        request.setAutoSelect(false);
         request.setRoomId(1L);
         request.setRequestId("req-fail-1");
 
-        // Ожидаем 503
         mockMvc.perform(post("/booking")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isServiceUnavailable());
 
-        // Проверяем, что бронирование сохранено со статусом CANCELLED
         Optional<Booking> cancelledBooking = bookingRepository.findByRequestId("req-fail-1");
         assertTrue(cancelledBooking.isPresent());
         assertEquals(Booking.BookingStatus.CANCELLED, cancelledBooking.get().getStatus());
-
-        // Проверяем, что компенсация (releaseRoom) была вызвана
-        verify(hotelServiceClient, times(1)).releaseRoom(eq(1L), eq("req-fail-1"));
     }
 
-    // НОВЫЙ ТЕСТ: Проверка идемпотентности
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void createBooking_whenHotelServiceTimesOut_shouldCancelAndReturn503() throws Exception {
+        // Тайм-аут. Блокировка не устанавливается, компенсация не нужна.
+        when(hotelServiceClient.confirmAvailability(anyLong(), any(AvailabilityRequest.class)))
+                .thenThrow(new RuntimeException("Read timed out"));
+
+        BookingRequest request = new BookingRequest();
+        request.setStartDate(LocalDate.of(2026, 12, 1));
+        request.setEndDate(LocalDate.of(2026, 12, 5));
+        request.setAutoSelect(false);
+        request.setRoomId(1L);
+        request.setRequestId("req-timeout-1");
+
+        mockMvc.perform(post("/booking")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isServiceUnavailable());
+
+        Optional<Booking> cancelledBooking = bookingRepository.findByRequestId("req-timeout-1");
+        assertTrue(cancelledBooking.isPresent());
+        assertEquals(Booking.BookingStatus.CANCELLED, cancelledBooking.get().getStatus());
+    }
+
     @Test
     @WithMockUser(username = "testuser", roles = "USER")
     void createBooking_withSameRequestId_shouldReturnExisting() throws Exception {
@@ -175,29 +194,24 @@ class BookingControllerTest {
         request.setAutoSelect(true);
         request.setRequestId("req-idempotent-1");
 
-        // Первый вызов
         mockMvc.perform(post("/booking")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("CONFIRMED"));
 
-        // Второй вызов с тем же requestId
         mockMvc.perform(post("/booking")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated()) // По коду возвращается 201, но это существующая бронь
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("CONFIRMED"));
 
-        // Проверяем, что в БД только одна запись
         assertEquals(1, bookingRepository.count());
     }
 
-    // НОВЫЙ ТЕСТ: Проверка отмены бронирования
     @Test
     @WithMockUser(username = "testuser", roles = "USER")
     void cancelBooking_shouldReturn200AndReleaseRoom() throws Exception {
-        // Создаем бронь напрямую в БД
         User user = userRepository.findByUsername("testuser").orElseThrow();
         Booking booking = new Booking();
         booking.setUser(user);
@@ -214,12 +228,10 @@ class BookingControllerTest {
         mockMvc.perform(delete("/booking/" + booking.getId()))
                 .andExpect(status().isOk());
 
-        // Проверяем статус в БД
         Optional<Booking> cancelled = bookingRepository.findById(booking.getId());
         assertTrue(cancelled.isPresent());
         assertEquals(Booking.BookingStatus.CANCELLED, cancelled.get().getStatus());
 
-        // Проверяем, что вызвали releaseRoom
         verify(hotelServiceClient, times(1)).releaseRoom(eq(1L), eq("req-cancel-1"));
     }
 }

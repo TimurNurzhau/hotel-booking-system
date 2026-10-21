@@ -12,19 +12,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/booking")
 @RequiredArgsConstructor
 public class BookingController {
 
     private final BookingService bookingService;
 
-    @PostMapping
+    // ТЗ: POST /booking — создать бронирование (USER)
+    @PostMapping("/booking")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<BookingDto> createBooking(@RequestBody BookingRequest request) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return new ResponseEntity<>(bookingService.createBooking(request, username), HttpStatus.CREATED);
     }
 
+    // ТЗ: GET /bookings — история бронирований пользователя (USER)
     @GetMapping("/bookings")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<Page<BookingDto>> getUserBookings(
@@ -34,14 +35,16 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getUserBookings(username, page, size));
     }
 
-    @GetMapping("/{id}")
+    // ТЗ: GET /booking/{id} — получить бронирование по id (USER)
+    @GetMapping("/booking/{id}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<BookingDto> getBookingById(@PathVariable Long id) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return ResponseEntity.ok(bookingService.getBookingById(id, username));
     }
 
-    @DeleteMapping("/{id}")
+    // ТЗ: DELETE /booking/{id} — отменить бронирование (USER)
+    @DeleteMapping("/booking/{id}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<Void> cancelBooking(@PathVariable Long id) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -49,7 +52,8 @@ public class BookingController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/admin/all")
+    // Дополнительный админский эндпоинт (не противоречит ТЗ)
+    @GetMapping("/booking/admin/all")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<BookingDto>> getAllBookings(
             @RequestParam(defaultValue = "0") int page,

@@ -55,6 +55,8 @@ public class BookingService {
                 .orElseThrow(() -> new NotFoundException("User not found: " + username));
 
         Long roomId = request.getRoomId();
+        boolean roomLocked = false;
+
         if (request.isAutoSelect()) {
             List<RoomDto> recommended;
             try {
@@ -77,6 +79,7 @@ public class BookingService {
                     Boolean confirmed = hotelServiceClient.confirmAvailability(room.getId(), availabilityRequest);
                     if (Boolean.TRUE.equals(confirmed)) {
                         roomId = room.getId();
+                        roomLocked = true;
                         found = true;
                         break;
                     }
@@ -104,7 +107,8 @@ public class BookingService {
         booking.setRequestId(request.getRequestId());
         booking = bookingRepository.save(booking);
 
-        log.info("Booking created in PENDING: id={}, roomId={}", booking.getId(), roomId);
+        log.info("Saga for bookingId={}: PENDING created (roomId={}, requestId={})",
+                booking.getId(), roomId, request.getRequestId());
 
         if (!request.isAutoSelect()) {
             try {
@@ -116,40 +120,64 @@ public class BookingService {
                 Boolean confirmed = hotelServiceClient.confirmAvailability(roomId, availabilityRequest);
 
                 if (Boolean.TRUE.equals(confirmed)) {
+                    roomLocked = true;
                     booking.setStatus(Booking.BookingStatus.CONFIRMED);
                     bookingRepository.save(booking);
-                    log.info("Booking CONFIRMED: id={}", booking.getId());
+                    log.info("Saga for bookingId={}: PENDING -> CONFIRMED", booking.getId());
                 } else {
                     booking.setStatus(Booking.BookingStatus.CANCELLED);
                     bookingRepository.save(booking);
-                    log.warn("Booking CANCELLED (room not available): id={}", booking.getId());
+                    log.warn("Saga for bookingId={}: PENDING -> CANCELLED (room not available)", booking.getId());
                     throw new ServiceUnavailableException("Room not available");
                 }
             } catch (ServiceUnavailableException e) {
                 booking.setStatus(Booking.BookingStatus.CANCELLED);
                 bookingRepository.save(booking);
-                log.error("Booking CANCELLED due to ServiceUnavailableException: id={}, error={}", booking.getId(), e.getMessage());
+                log.error("Saga for bookingId={}: PENDING -> CANCELLED due to ServiceUnavailableException", booking.getId());
+                // Если комната была заблокирована (в autoSelect или до ошибки), компенсируем
+                if (roomLocked) {
+                    compensate(booking);
+                }
                 throw e;
             } catch (Exception e) {
                 booking.setStatus(Booking.BookingStatus.CANCELLED);
                 bookingRepository.save(booking);
-                log.error("Booking CANCELLED due to error: id={}, error={}", booking.getId(), e.getMessage());
+                log.error("Saga for bookingId={}: PENDING -> CANCELLED due to error", booking.getId());
 
-                try {
-                    hotelServiceClient.releaseRoom(roomId, request.getRequestId());
-                    log.info("Room released after compensation: roomId={}, requestId={}", roomId, request.getRequestId());
-                } catch (Exception ex) {
-                    log.error("Failed to release room: {}", ex.getMessage());
+                if (roomLocked) {
+                    compensate(booking);
                 }
                 throw new ServiceUnavailableException("Booking failed: " + e.getMessage());
             }
         } else {
-            booking.setStatus(Booking.BookingStatus.CONFIRMED);
-            bookingRepository.save(booking);
-            log.info("Booking CONFIRMED (autoSelect): id={}", booking.getId());
+            // autoSelect=true: блокировка уже установлена в цикле
+            try {
+                booking.setStatus(Booking.BookingStatus.CONFIRMED);
+                bookingRepository.save(booking);
+                log.info("Saga for bookingId={}: PENDING -> CONFIRMED (autoSelect)", booking.getId());
+            } catch (Exception e) {
+                booking.setStatus(Booking.BookingStatus.CANCELLED);
+                bookingRepository.save(booking);
+                log.error("Saga for bookingId={}: PENDING -> CANCELLED (error during autoSelect confirm)", booking.getId());
+                if (roomLocked) {
+                    compensate(booking);
+                }
+                throw new ServiceUnavailableException("Booking failed: " + e.getMessage());
+            }
         }
 
         return bookingMapper.toDto(booking);
+    }
+
+    private void compensate(Booking booking) {
+        try {
+            hotelServiceClient.releaseRoom(booking.getRoomId(), booking.getRequestId());
+            log.info("Saga for bookingId={}: Compensation executed - releaseRoom called for roomId={}",
+                    booking.getId(), booking.getRoomId());
+        } catch (Exception ex) {
+            log.error("Saga for bookingId={}: Compensation failed - releaseRoom error: {}",
+                    booking.getId(), ex.getMessage());
+        }
     }
 
     public Page<BookingDto> getUserBookings(String username, int page, int size) {
@@ -182,13 +210,8 @@ public class BookingService {
         }
         booking.setStatus(Booking.BookingStatus.CANCELLED);
         bookingRepository.save(booking);
-        log.info("Booking CANCELLED by user: id={}", id);
+        log.info("Saga for bookingId={}: CANCELLED by user", id);
 
-        try {
-            hotelServiceClient.releaseRoom(booking.getRoomId(), booking.getRequestId());
-            log.info("Room released after cancellation: roomId={}, requestId={}", booking.getRoomId(), booking.getRequestId());
-        } catch (Exception e) {
-            log.error("Failed to release room: {}", e.getMessage());
-        }
+        compensate(booking);
     }
 }

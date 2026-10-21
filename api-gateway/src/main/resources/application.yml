@@ -20,7 +20,9 @@ spring:
           predicates:
             - Path=/api/hotels/**
           filters:
-            - RewritePath=/api/hotels/(?<segment>.*), /api/hotels/$\{segment}
+            # ИСПРАВЛЕНИЕ: убран префикс /api/hotels/ из второго аргумента,
+            # чтобы запросы корректно доходили до контроллеров hotel-service
+            - RewritePath=/api/hotels/(?<segment>.*), /$\{segment}
 
 eureka:
   client:
