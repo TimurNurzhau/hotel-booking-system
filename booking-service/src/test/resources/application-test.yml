@@ -18,6 +18,8 @@ spring:
       enabled: true
       path: /h2-console
   cloud:
+    loadbalancer:
+      enabled: false
     openfeign:
       client:
         config:
@@ -25,6 +27,8 @@ spring:
             connect-timeout: 2000
             read-timeout: 2000
             logger-level: basic
+          hotel-service:
+            url: http://localhost:0
 
 eureka:
   client:
@@ -37,6 +41,9 @@ eureka:
 jwt:
   secret: mySuperSecretKeyForHotelBookingSystem1234567890
   expiration: 3600000  # 1 hour
+
+internal:
+  api-key: super-secret-internal-key
 
 springdoc:
   swagger-ui:

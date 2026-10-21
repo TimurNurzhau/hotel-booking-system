@@ -24,6 +24,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -38,6 +39,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *  3) Вызываем /booking с autoSelect=false и roomId=1.
  *  4) WireMock эмулирует падение hotel-service на /confirm-availability (500).
  *  5) Проверяем, что API вернул 503, а в БД бронь сохранена со статусом CANCELLED.
+ *
+ * Важно: requestId генерируется уникальным через UUID, чтобы избежать
+ * ложного срабатывания идемпотентности, если БД не очистилась между запусками.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -101,12 +105,15 @@ class BookingFlowIntegrationTest {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(token);
 
+        // Уникальный requestId, чтобы избежать ложной идемпотентности между запусками
+        String requestId = "integration-test-fail-" + UUID.randomUUID();
+
         BookingRequest request = new BookingRequest();
         request.setStartDate(LocalDate.of(2026, 12, 1));
         request.setEndDate(LocalDate.of(2026, 12, 5));
         request.setAutoSelect(false);
         request.setRoomId(1L);
-        request.setRequestId("integration-test-fail-1");
+        request.setRequestId(requestId);
 
         ResponseEntity<String> response = restTemplate.postForEntity(
                 "/booking",
@@ -118,7 +125,7 @@ class BookingFlowIntegrationTest {
                 "Booking should return 503 when hotel-service fails");
 
         // 4. Проверяем состояние в БД: бронь существует, но CANCELLED
-        Optional<Booking> saved = bookingRepository.findByRequestId("integration-test-fail-1");
+        Optional<Booking> saved = bookingRepository.findByRequestId(requestId);
         assertTrue(saved.isPresent(), "Booking should be saved in DB");
         assertEquals(Booking.BookingStatus.CANCELLED, saved.get().getStatus(),
                 "Booking should be CANCELLED after compensation");
